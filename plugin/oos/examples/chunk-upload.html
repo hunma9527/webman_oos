@@ -1,0 +1,107 @@
+            const businessId = document.getElementById('businessId').value;
+            
+            try {
+                // 初始化分片上传
+                resultDiv.textContent = '初始化分片上传...';
+                
+                const initResponse = await fetch('/oos/upload/chunk', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: new URLSearchParams({
+                        'filename': file.name,
+                        'total_chunks': totalChunks
+                    })
+                });
+                
+                const initData = await initResponse.json();
+                
+                if (initData.code !== 0) {
+                    throw new Error(initData.msg || '初始化失败');
+                }
+                
+                resultDiv.textContent = '初始化成功，开始上传分片...';
+                
+                const uploadId = initData.data.upload_id;
+                let uploadedChunks = 0;
+                
+                // 上传每个分片
+                for (let i = 0; i < totalChunks; i++) {
+                    const start = i * chunkSize;
+                    const end = Math.min(file.size, start + chunkSize);
+                    const chunk = file.slice(start, end);
+                    
+                    const formData = new FormData();
+                    formData.append('upload_id', uploadId);
+                    formData.append('chunk_index', i);
+                    formData.append('chunk', chunk);
+                    
+                    resultDiv.textContent = `上传分片 ${i + 1}/${totalChunks}...`;
+                    
+                    const chunkResponse = await fetch('/oos/upload/chunk', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const chunkData = await chunkResponse.json();
+                    
+                    if (chunkData.code !== 0) {
+                        throw new Error(chunkData.msg || `分片${i}上传失败`);
+                    }
+                    
+                    uploadedChunks++;
+                    const progress = Math.floor(uploadedChunks / totalChunks * 100);
+                    progressBar.style.width = progress + '%';
+                    progressText.textContent = progress + '%';
+                }
+                
+                // 所有分片上传完成，合并文件
+                resultDiv.textContent = '所有分片上传完成，开始合并...';
+                
+                const mergeFormData = new FormData();
+                mergeFormData.append('upload_id', uploadId);
+                
+                if (businessType) {
+                    mergeFormData.append('business_type', businessType);
+                }
+                
+                if (businessId) {
+                    mergeFormData.append('business_id', businessId);
+                }
+                
+                const mergeResponse = await fetch('/oos/upload/merge', {
+                    method: 'POST',
+                    body: mergeFormData
+                });
+                
+                const mergeData = await mergeResponse.json();
+                
+                if (mergeData.code !== 0) {
+                    throw new Error(mergeData.msg || '合并失败');
+                }
+                
+                resultDiv.textContent = '上传成功:\n' + JSON.stringify(mergeData, null, 2);
+                
+                // 如果是图片，显示预览
+                if (mergeData.data.file_type.startsWith('image/')) {
+                    previewContainer.innerHTML = `
+                        <h3>上传成功</h3>
+                        <p>原图：</p>
+                        <img src="${mergeData.data.url}" alt="上传图片">
+                        
+                        <p>缩略图 (小)：</p>
+                        <img src="/oos/image/${mergeData.data.id}/thumbnail/small" alt="缩略图">
+                        
+                        <p>缩略图 (中)：</p>
+                        <img src="/oos/image/${mergeData.data.id}/thumbnail/medium" alt="缩略图">
+                    `;
+                }
+            } catch (error) {
+                resultDiv.textContent = '上传失败: ' + error.message;
+                progressContainer.style.display = 'none';
+            }
+        });
+    </script>
+</body>
+</html>

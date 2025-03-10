@@ -1,0 +1,22 @@
+{
+    "name": "webman/oos",
+    "description": "Object Oriented Storage System for Webman",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.0",
+        "workerman/webman-framework": "^1.5.0",
+        "illuminate/database": "^9.0|^10.0"
+    },
+    "suggest": {
+        "ext-gd": "*",
+        "ext-imagick": "*",
+        "ext-fileinfo": "*",
+        "robmorgan/phinx": "^0.13.4"
+    },
+    "autoload": {
+        "psr-4": {
+            "plugin\\oos\\": "./"
+        }
+    }
+}
