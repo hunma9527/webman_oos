@@ -1,0 +1,282 @@
+                    </div>
+                    <div class="stats-card">
+                        <h3>图片文件数</h3>
+                        <p>${stats.image_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>文档文件数</h3>
+                        <p>${stats.document_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>视频文件数</h3>
+                        <p>${stats.video_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>音频文件数</h3>
+                        <p>${stats.audio_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>其他文件</h3>
+                        <p>${stats.other_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>今日上传</h3>
+                        <p>${timeStats.today_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>昨日上传</h3>
+                        <p>${timeStats.yesterday_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>本周上传</h3>
+                        <p>${timeStats.week_files}</p>
+                    </div>
+                    <div class="stats-card">
+                        <h3>本月上传</h3>
+                        <p>${timeStats.month_files}</p>
+                    </div>
+                `;
+                
+                // 填充磁盘使用情况
+                const diskUsage = data.data.disk_usage;
+                document.getElementById('diskUsage').innerHTML = `
+                    <div style="background:#eee;height:20px;width:100%;border-radius:10px;overflow:hidden;margin-bottom:10px;">
+                        <div style="background:#4CAF50;height:100%;width:${diskUsage.used_percent}%;"></div>
+                    </div>
+                    <p>总空间: ${formatFileSize(diskUsage.total_space)}</p>
+                    <p>已用: ${formatFileSize(diskUsage.used_space)} (${diskUsage.used_percent}%)</p>
+                    <p>可用: ${formatFileSize(diskUsage.free_space)}</p>
+                    <p>OOS使用: ${formatFileSize(diskUsage.oos_space)} (${diskUsage.oos_percent}% 占总空间)</p>
+                `;
+                
+                // 文件类型统计
+                const fileTypeStats = document.getElementById('fileTypeStats');
+                fileTypeStats.innerHTML = '';
+                data.data.file_type_stats.forEach(item => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${item.file_ext || '无扩展名'}</td>
+                        <td>${item.count}</td>
+                        <td>${formatFileSize(item.total_size)}</td>
+                    `;
+                    fileTypeStats.appendChild(row);
+                });
+                
+                // 热门文件
+                const hotFiles = document.getElementById('hotFiles');
+                hotFiles.innerHTML = '';
+                data.data.hot_files.forEach(file => {
+                    const row = document.createElement('tr');
+                    
+                    // 检查是否为图片
+                    let previewHtml = '<span>无预览</span>';
+                    if (file.url && file.url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i)) {
+                        previewHtml = `<img src="/oos/image/${file.id}/thumbnail/small" class="file-preview" alt="预览">`;
+                    }
+                    
+                    row.innerHTML = `
+                        <td>${previewHtml}</td>
+                        <td>${file.original_name}</td>
+                        <td>${formatFileSize(file.file_size)}</td>
+                        <td>${file.access_count}</td>
+                        <td>${formatDateTime(file.last_access_time)}</td>
+                    `;
+                    hotFiles.appendChild(row);
+                });
+                
+            } catch (error) {
+                document.getElementById('result').textContent = '错误: ' + error.message;
+                document.getElementById('result').style.display = 'block';
+            }
+        });
+        
+        // 加载孤立文件
+        let currentOrphanPage = 1;
+        
+        async function loadOrphanFiles(page = 1) {
+            try {
+                const days = document.getElementById('orphanDays').value || 7;
+                
+                const response = await fetch(`/oos/admin/files/orphan?admin_token=${encodeURIComponent(adminToken)}&days=${days}&page=${page}&per_page=10`);
+                const data = await response.json();
+                
+                if (data.code !== 0) {
+                    throw new Error(data.msg || '获取孤立文件失败');
+                }
+                
+                // 显示结果区域
+                document.getElementById('orphanResult').style.display = 'block';
+                
+                // 填充文件列表
+                const filesList = document.getElementById('orphanFiles');
+                filesList.innerHTML = '';
+                
+                if (data.data.data.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = '<td colspan="6">没有找到孤立文件</td>';
+                    filesList.appendChild(row);
+                } else {
+                    data.data.data.forEach(file => {
+                        const row = document.createElement('tr');
+                        
+                        // 检查是否为图片
+                        let previewHtml = '<span>无预览</span>';
+                        if (file.file_type && file.file_type.startsWith('image/')) {
+                            previewHtml = `<img src="/oos/image/${file.id}/thumbnail/small" class="file-preview" alt="预览">`;
+                        }
+                        
+                        row.innerHTML = `
+                            <td>${previewHtml}</td>
+                            <td>${file.original_name}</td>
+                            <td>${formatFileSize(file.file_size)}</td>
+                            <td>${file.file_type}</td>
+                            <td>${formatDateTime(file.upload_time)}</td>
+                            <td>
+                                <button class="danger" onclick="deleteFile(${file.id})">删除</button>
+                            </td>
+                        `;
+                        filesList.appendChild(row);
+                    });
+                }
+                
+                // 更新分页
+                updatePagination(data.data);
+                
+            } catch (error) {
+                document.getElementById('result').textContent = '错误: ' + error.message;
+                document.getElementById('result').style.display = 'block';
+            }
+        }
+        
+        document.getElementById('loadOrphanBtn').addEventListener('click', () => {
+            currentOrphanPage = 1;
+            loadOrphanFiles(currentOrphanPage);
+        });
+        
+        // 更新分页控件
+        function updatePagination(pageData) {
+            const pagination = document.getElementById('orphanPagination');
+            pagination.innerHTML = '';
+            
+            // 上一页按钮
+            const prevButton = document.createElement('button');
+            prevButton.textContent = '上一页';
+            prevButton.disabled = pageData.current_page <= 1;
+            prevButton.addEventListener('click', () => {
+                currentOrphanPage--;
+                loadOrphanFiles(currentOrphanPage);
+            });
+            pagination.appendChild(prevButton);
+            
+            // 页码信息
+            const pageInfo = document.createElement('span');
+            pageInfo.textContent = ` 第 ${pageData.current_page}/${pageData.last_page} 页，共 ${pageData.total} 项 `;
+            pagination.appendChild(pageInfo);
+            
+            // 下一页按钮
+            const nextButton = document.createElement('button');
+            nextButton.textContent = '下一页';
+            nextButton.disabled = pageData.current_page >= pageData.last_page;
+            nextButton.addEventListener('click', () => {
+                currentOrphanPage++;
+                loadOrphanFiles(currentOrphanPage);
+            });
+            pagination.appendChild(nextButton);
+        }
+        
+        // 删除文件
+        window.deleteFile = async function(fileId) {
+            if (!confirm('确定要删除这个文件吗？此操作不可恢复！')) {
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('id', fileId);
+                
+                const response = await fetch(`/oos/file/delete?admin_token=${encodeURIComponent(adminToken)}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.code !== 0) {
+                    throw new Error(data.msg || '删除文件失败');
+                }
+                
+                // 重新加载当前页
+                loadOrphanFiles(currentOrphanPage);
+                
+                document.getElementById('result').textContent = '文件删除成功';
+                document.getElementById('result').style.display = 'block';
+                
+            } catch (error) {
+                document.getElementById('result').textContent = '错误: ' + error.message;
+                document.getElementById('result').style.display = 'block';
+            }
+        };
+        
+        // 清理孤立文件
+        document.getElementById('cleanOrphanBtn').addEventListener('click', async () => {
+            if (!confirm('确定要清理孤立文件吗？此操作不可恢复！')) {
+                return;
+            }
+            
+            try {
+                const days = document.getElementById('cleanDays').value || 7;
+                const limit = document.getElementById('cleanLimit').value || 100;
+                
+                const formData = new FormData();
+                formData.append('type', 'orphan');
+                formData.append('days', days);
+                formData.append('limit', limit);
+                
+                const response = await fetch(`/oos/admin/files/clean?admin_token=${encodeURIComponent(adminToken)}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.code !== 0) {
+                    throw new Error(data.msg || '清理孤立文件失败');
+                }
+                
+                document.getElementById('cleanResult').textContent = data.data.message;
+                
+            } catch (error) {
+                document.getElementById('cleanResult').textContent = '错误: ' + error.message;
+            }
+        });
+        
+        // 清理缩略图缓存
+        document.getElementById('cleanThumbnailBtn').addEventListener('click', async () => {
+            if (!confirm('确定要清理所有缩略图缓存吗？')) {
+                return;
+            }
+            
+            try {
+                const formData = new FormData();
+                formData.append('type', 'thumbnail');
+                
+                const response = await fetch(`/oos/admin/files/clean?admin_token=${encodeURIComponent(adminToken)}`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.code !== 0) {
+                    throw new Error(data.msg || '清理缩略图缓存失败');
+                }
+                
+                document.getElementById('cleanResult').textContent = data.data.message;
+                
+            } catch (error) {
+                document.getElementById('cleanResult').textContent = '错误: ' + error.message;
+            }
+        });
+    </script>
+</body>
+</html>
